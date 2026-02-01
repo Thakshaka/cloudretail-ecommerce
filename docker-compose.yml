@@ -1,0 +1,268 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: cloudretail-postgres
+    environment:
+      POSTGRES_DB: cloudretail
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - cloudretail-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: cloudretail-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - cloudretail-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # LocalStack (for AWS services emulation)
+  localstack:
+    image: localstack/localstack:latest
+    container_name: cloudretail-localstack
+    environment:
+      SERVICES: s3,sqs,sns,eventbridge,ses
+      DEBUG: 1
+      DATA_DIR: /tmp/localstack/data
+    ports:
+      - "4566:4566"
+      - "4571:4571"
+    volumes:
+      - localstack_data:/tmp/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - cloudretail-network
+
+  # User Service
+  user-service:
+    build:
+      context: ./services/user-service
+      dockerfile: Dockerfile
+    container_name: cloudretail-user-service
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: cloudretail
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: dev_jwt_secret_key
+      JWT_EXPIRES_IN: 1h
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - cloudretail-network
+    volumes:
+      - ./services/user-service:/app
+      - /app/node_modules
+    command: npm start
+
+  # Product Service
+  product-service:
+    build:
+      context: ./services/product-service
+      dockerfile: Dockerfile
+    container_name: cloudretail-product-service
+    environment:
+      NODE_ENV: development
+      PORT: 3002
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: cloudretail
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "3002:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - cloudretail-network
+    # volumes:
+    #   - ./services/product-service:/app
+    #   - /app/node_modules
+    command: npm start
+
+  # Inventory Service
+  inventory-service:
+    build:
+      context: ./services/inventory-service
+      dockerfile: Dockerfile
+    container_name: cloudretail-inventory-service
+    environment:
+      NODE_ENV: development
+      PORT: 3003
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: cloudretail
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      EVENTBRIDGE_ENDPOINT: http://localstack:4566
+    ports:
+      - "3003:3003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      localstack:
+        condition: service_started
+    networks:
+      - cloudretail-network
+    volumes:
+      - ./services/inventory-service:/app
+      - /app/node_modules
+    command: npm start
+
+  # Order Service
+  order-service:
+    build:
+      context: ./services/order-service
+      dockerfile: Dockerfile
+    container_name: cloudretail-order-service
+    environment:
+      NODE_ENV: development
+      PORT: 3004
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: cloudretail
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      EVENTBRIDGE_ENDPOINT: http://localstack:4566
+    ports:
+      - "3004:3004"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_started
+    networks:
+      - cloudretail-network
+    # volumes:
+    #   - ./services/order-service:/app
+    #   - /app/node_modules
+    command: npm start
+
+  # Payment Service
+  payment-service:
+    build:
+      context: ./services/payment-service
+      dockerfile: Dockerfile
+    container_name: cloudretail-payment-service
+    environment:
+      NODE_ENV: development
+      PORT: 3005
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: cloudretail
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      STRIPE_SECRET_KEY: sk_test_your_key_here
+      EVENTBRIDGE_ENDPOINT: http://localstack:4566
+    ports:
+      - "3005:3005"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_started
+    networks:
+      - cloudretail-network
+    # volumes:
+    #   - ./services/payment-service:/app
+    #   - /app/node_modules
+    command: npm start
+
+  # Notification Service
+  notification-service:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile
+    container_name: cloudretail-notification-service
+    environment:
+      NODE_ENV: development
+      PORT: 3006
+      SES_ENDPOINT: http://localstack:4566
+      SNS_ENDPOINT: http://localstack:4566
+      EVENTBRIDGE_ENDPOINT: http://localstack:4566
+    ports:
+      - "3006:3006"
+    depends_on:
+      localstack:
+        condition: service_started
+    networks:
+      - cloudretail-network
+    # volumes:
+    #   - ./services/notification-service:/app
+    #   - /app/node_modules
+    command: npm start
+
+  dashboard:
+    build: 
+      context: ./frontend
+    container_name: cloudretail-dashboard
+    ports:
+      - "5173:5173"
+    depends_on:
+      - user-service
+      - product-service
+      - order-service
+    networks:
+      - cloudretail-network
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+    container_name: cloudretail-api-gateway
+    ports:
+      - "8080:8000"
+    depends_on:
+      - user-service
+      - product-service
+      - inventory-service
+      - order-service
+      - payment-service
+    networks:
+      - cloudretail-network
+
+networks:
+  cloudretail-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  localstack_data:
