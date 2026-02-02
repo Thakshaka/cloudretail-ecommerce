@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Package, ShoppingCart, CheckCircle2, Loader2, CreditCard, ShieldCheck } from 'lucide-react';
 
+// API endpoints - use environment variable or default to localhost
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 const API_BASE = {
-  products: 'http://localhost:8080/api/v1',
-  orders: 'http://localhost:8080/api/v1',
-  inventory: 'http://localhost:8080/api/v1',
+  products: `${API_BASE_URL}/api/v1`,
+  orders: `${API_BASE_URL}/api/v1`,
+  inventory: `${API_BASE_URL}/api/v1`,
 };
 
 // Hardcoded User ID for demo
