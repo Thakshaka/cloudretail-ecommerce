@@ -169,7 +169,7 @@ const CheckoutPage = () => {
 
           <h3 style={{ marginBottom: '1.5rem' }}>Payment Details</h3>
           <div style={{ padding: '1rem', backgroundColor: '#f3f4f6', borderRadius: '4px', marginBottom: '2rem', color: '#666' }}>
-            Running in Simulation Mode. No real payment required.
+            Cash on Delivery
           </div>
 
           <button 
