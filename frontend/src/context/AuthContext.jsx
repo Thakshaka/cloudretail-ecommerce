@@ -3,6 +3,10 @@ import axios from 'axios';
 
 const AuthContext = createContext(null);
 
+// Configure axios base URL
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+axios.defaults.baseURL = API_BASE_URL;
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('token'));
