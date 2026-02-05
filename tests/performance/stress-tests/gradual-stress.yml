@@ -1,0 +1,85 @@
+config:
+  target: "http://localhost:8080"
+  phases:
+    - duration: 60
+      arrivalRate: 10
+      name: "Baseline"
+    - duration: 300
+      arrivalRate: 10
+      rampTo: 200
+      name: "Gradual ramp up to 200 users"
+    - duration: 180
+      arrivalRate: 200
+      name: "Sustained stress - 200 users"
+    - duration: 300
+      arrivalRate: 200
+      rampTo: 500
+      name: "Extreme stress - ramp to 500 users"
+    - duration: 120
+      arrivalRate: 500
+      name: "Peak stress - 500 users"
+  processor: "./test-helpers.js"
+  plugins:
+    metrics-by-endpoint:
+      stripQueryString: true
+
+scenarios:
+  - name: "Heavy Product Browsing"
+    weight: 40
+    flow:
+      - loop:
+          - get:
+              url: "/api/v1/products"
+          - think: 0.5
+          - get:
+              url: "/api/v1/products?page={{ $randomNumber(1, 10) }}"
+          - think: 0.5
+        count: 5
+
+  - name: "Rapid User Registration"
+    weight: 30
+    flow:
+      - post:
+          url: "/api/v1/auth/register"
+          json:
+            email: "stress{{ $randomString() }}@example.com"
+            password: "Test@1234"
+            firstName: "Stress"
+            lastName: "Test"
+
+  - name: "Concurrent Order Placement"
+    weight: 30
+    flow:
+      - post:
+          url: "/api/v1/auth/login"
+          json:
+            email: "stresstest@example.com"
+            password: "Test@1234"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+            - json: "$.user.id"
+              as: "userId"
+      - get:
+          url: "/api/v1/products"
+          capture:
+            - json: "$.products[0].id"
+              as: "productId"
+            - json: "$.products[0].price"
+              as: "productPrice"
+      - post:
+          url: "/api/v1/orders"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            userId: "{{ userId }}"
+            items:
+              - productId: "{{ productId }}"
+                quantity: "{{ $randomNumber(1, 5) }}"
+                price: "{{ productPrice }}"
+            shippingAddress:
+              street: "123 Stress Test St"
+              city: "Test City"
+              state: "TS"
+              zip: "12345"
+              country: "Test Country"
